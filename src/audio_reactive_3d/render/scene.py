@@ -57,6 +57,25 @@ class Scene:
 
         ctx.enable(moderngl.DEPTH_TEST)
 
+    def set_program(self, program: moderngl.Program) -> None:
+        """Swap in a (re)compiled shader program, e.g. after a hot-reload.
+
+        Rebuilds the VAO (bound to a specific `Program` object) and
+        re-applies the static uniforms/UBO binding against the new program.
+        Geometry buffers (VBO/IBO) are reused unchanged.
+        """
+        self._program = program
+        self._vao = self._ctx.vertex_array(
+            program,
+            [(self._vbo, "3f 3f", "in_position", "in_normal")],
+            self._ibo,
+        )
+        self._program["Features"].binding = _FEATURES_UBO_BINDING
+        self._feature_ubo.bind_to_uniform_block(_FEATURES_UBO_BINDING)
+        self._program["u_base_color"].value = tuple(config.BASE_COLOR)
+        self._program["u_ambient"].value = config.AMBIENT_INTENSITY
+        self._program["u_camera_pos"].value = tuple(config.CAMERA_POSITION)
+
     def render(self, time_s: float, aspect_ratio: float, feature_vector: np.ndarray) -> None:
         """Upload the latest feature vector and draw one frame.
 

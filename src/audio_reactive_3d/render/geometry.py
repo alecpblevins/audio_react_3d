@@ -90,6 +90,28 @@ def generate_icosphere(
     return vertex_array, normal_array, index_array
 
 
+def generate_fibonacci_sphere(count: int) -> np.ndarray:
+    """Generate ``count`` unit vectors spread evenly over a sphere.
+
+    Uses the Fibonacci lattice method, which distributes points with
+    near-uniform density without any iterative relaxation. Used for the
+    particle-field visual mode (Milestone 4), where each point is one
+    particle's "home" direction.
+
+    Returns:
+        float32 array, shape ``(count, 3)``, each row a unit-length vector.
+    """
+    indices = np.arange(0, count, dtype=np.float64) + 0.5
+    phi = np.arccos(1.0 - 2.0 * indices / count)
+    golden_angle = np.pi * (1.0 + 5.0**0.5)
+    theta = golden_angle * indices
+
+    x = np.sin(phi) * np.cos(theta)
+    y = np.sin(phi) * np.sin(theta)
+    z = np.cos(phi)
+    return np.stack([x, y, z], axis=1).astype(np.float32)
+
+
 def _normalize(vertex: list[float]) -> list[float]:
     arr = np.asarray(vertex, dtype=np.float64)
     norm = float(np.linalg.norm(arr))

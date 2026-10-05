@@ -122,6 +122,29 @@ BASE_COLOR: tuple[float, float, float] = (0.12, 0.14, 0.26)
 #: light, so the mesh never reads as a black silhouette.
 AMBIENT_INTENSITY: float = 0.45
 
+# --------------------------------------------------------------------------
+# Rendering: particle-field visual mode (Milestone 4)
+# --------------------------------------------------------------------------
+
+#: Number of particles in the spectrum particle field, spread evenly over a
+#: sphere (Fibonacci lattice) and assigned round-robin to spectrum bins so
+#: every bin is represented by roughly ``PARTICLE_COUNT / SPECTRUM_BINS``
+#: particles.
+PARTICLE_COUNT: int = 2048
+
+#: How far each particle is pushed outward from its "home" sphere position,
+#: scaled by its assigned spectrum bin's normalized (0..1) value.
+PARTICLE_DISPLACEMENT_SCALE: float = 0.9
+
+#: Point sprite size range (pixels): rendered size is
+#: ``base + bin_value * scale + rms * rms_scale``.
+PARTICLE_POINT_BASE_SIZE: float = 3.0
+PARTICLE_POINT_SIZE_SCALE: float = 10.0
+PARTICLE_POINT_RMS_SCALE: float = 6.0
+
+#: Hot-reload: how often (seconds) to stat() shader files for changes.
+SHADER_RELOAD_POLL_SECONDS: float = 0.5
+
 #: Slow idle auto-rotation so the mesh reads as 3D even with a static
 #: camera (radians/second about the Y axis).
 ROTATION_SPEED_RAD_PER_SEC: float = 0.3

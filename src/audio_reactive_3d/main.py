@@ -166,7 +166,7 @@ def _run_render(device_name: str | None) -> int:
     capture, dsp_worker, shared = started
 
     try:
-        app_cls = build_visualizer_app(shared, capture.device_name)
+        app_cls = build_visualizer_app(shared, capture.device_name, capture_alive=capture.alive)
         logger.info("Opening visualizer window for device %r. Close it to stop.", capture.device_name)
         # args=[] bypasses moderngl_window's own argv parsing (window
         # backend/size/fullscreen flags) since our CLI already owns argv.

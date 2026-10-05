@@ -112,6 +112,13 @@ class LoopbackCapture:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
+        #: Cleared by the capture thread if the underlying stream raises
+        #: unexpectedly (e.g. the output device was unplugged/disabled).
+        #: Callers (e.g. the render loop) can poll this to shut down
+        #: cleanly instead of silently freezing with stale audio features.
+        self.alive = threading.Event()
+        self.alive.set()
+
     @staticmethod
     def _resolve_speaker(device_name: str | None):
         if device_name:
@@ -158,3 +165,4 @@ class LoopbackCapture:
                     self._ring_buffer.write(frames.astype(np.float32, copy=False))
         except Exception:
             logger.exception("Audio capture loop terminated unexpectedly")
+            self.alive.clear()
