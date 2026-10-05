@@ -19,11 +19,13 @@ layout(std140) uniform Features {
 uniform mat4 u_model;
 uniform mat4 u_mvp;
 uniform float u_displacement_scale;
+uniform vec3 u_camera_pos;
 
 in vec3 in_position;
 in vec3 in_normal;
 
 out vec3 v_world_normal;
+out vec3 v_view_dir;
 
 void main() {
     float low_band = data[16].x;
@@ -31,7 +33,9 @@ void main() {
     // Displace each vertex outward along its normal by the smoothed bass
     // energy -- this is what makes the sphere visibly "pulse" with the beat.
     vec3 displaced = in_position + in_normal * (low_band * u_displacement_scale);
+    vec3 world_pos = vec3(u_model * vec4(displaced, 1.0));
 
     gl_Position = u_mvp * vec4(displaced, 1.0);
     v_world_normal = normalize(mat3(u_model) * in_normal);
+    v_view_dir = u_camera_pos - world_pos;
 }

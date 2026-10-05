@@ -50,6 +50,11 @@ class Scene:
         self._program["Features"].binding = _FEATURES_UBO_BINDING
         self._feature_ubo.bind_to_uniform_block(_FEATURES_UBO_BINDING)
 
+        # Static lighting/camera uniforms that don't change per frame.
+        self._program["u_base_color"].value = tuple(config.BASE_COLOR)
+        self._program["u_ambient"].value = config.AMBIENT_INTENSITY
+        self._program["u_camera_pos"].value = tuple(config.CAMERA_POSITION)
+
         ctx.enable(moderngl.DEPTH_TEST)
 
     def render(self, time_s: float, aspect_ratio: float, feature_vector: np.ndarray) -> None:

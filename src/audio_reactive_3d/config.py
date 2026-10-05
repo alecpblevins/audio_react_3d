@@ -114,6 +114,14 @@ CAMERA_FOV_DEGREES: float = 45.0
 CAMERA_NEAR: float = 0.1
 CAMERA_FAR: float = 100.0
 
+#: Unlit base surface color (r, g, b), bright enough to stay clearly visible
+#: even at silence; band energies additively brighten it on top.
+BASE_COLOR: tuple[float, float, float] = (0.12, 0.14, 0.26)
+
+#: Minimum lighting factor applied even on faces pointing away from the key
+#: light, so the mesh never reads as a black silhouette.
+AMBIENT_INTENSITY: float = 0.45
+
 #: Slow idle auto-rotation so the mesh reads as 3D even with a static
 #: camera (radians/second about the Y axis).
 ROTATION_SPEED_RAD_PER_SEC: float = 0.3

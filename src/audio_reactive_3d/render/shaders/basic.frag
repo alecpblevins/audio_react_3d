@@ -6,6 +6,10 @@ layout(std140) uniform Features {
 };
 
 in vec3 v_world_normal;
+in vec3 v_view_dir;
+
+uniform vec3 u_base_color;
+uniform float u_ambient;
 
 out vec4 frag_color;
 
@@ -13,13 +17,21 @@ void main() {
     float mid_band = data[16].y;
     float high_band = data[16].z;
 
-    // Dark base tone; treble pushes warm/bright hues, mids push blue/violet.
-    vec3 base_color = vec3(0.04, 0.05, 0.09);
-    vec3 color = base_color + vec3(high_band, 0.5 * mid_band + 0.2 * high_band, mid_band);
+    // Idle-visible base tone (tunable via config.BASE_COLOR); treble pushes
+    // warm/bright hues, mids push blue/violet on top of it.
+    vec3 color = u_base_color + vec3(high_band, 0.55 * mid_band + 0.25 * high_band, mid_band);
 
-    vec3 light_dir = normalize(vec3(0.4, 0.7, 0.6));
-    float diffuse = max(dot(normalize(v_world_normal), light_dir), 0.0);
-    float ambient = 0.25;
+    vec3 normal = normalize(v_world_normal);
+    vec3 view_dir = normalize(v_view_dir);
 
-    frag_color = vec4(color * (ambient + (1.0 - ambient) * diffuse), 1.0);
+    vec3 key_light_dir = normalize(vec3(0.4, 0.7, 0.6));
+    float diffuse = max(dot(normal, key_light_dir), 0.0);
+
+    // Fresnel-style rim light so the silhouette reads clearly even when the
+    // key light is dim or facing away -- keeps the sphere legible instead of
+    // silhouetting to black against the dark background.
+    float rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 2.0);
+
+    float lighting = u_ambient + (1.0 - u_ambient) * diffuse + 0.35 * rim;
+    frag_color = vec4(color * lighting, 1.0);
 }
