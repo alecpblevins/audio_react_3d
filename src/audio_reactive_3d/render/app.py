@@ -40,6 +40,7 @@ def build_visualizer_app(
     shared: SharedFeatureState,
     device_label: str,
     capture_alive: threading.Event | None = None,
+    low_power: bool = False,
 ) -> type[mglw.WindowConfig]:
     """Build a ``WindowConfig`` subclass bound to one capture session.
 
@@ -52,21 +53,56 @@ def build_visualizer_app(
             if its stream dies unexpectedly (e.g. device disconnected).
             Polled once per frame so the window closes cleanly instead of
             freezing on stale audio when the device goes away.
+        low_power: If set (``--low-power`` on the CLI), use a smaller
+            window, no MSAA, a much lower-poly icosphere, and fewer
+            particles -- a workaround for machines with no dedicated GPU,
+            where the default settings can render too slowly to look
+            animated (see ``config.py``'s "low-power / CPU" section).
     """
+
+    window_size_value = config.LOW_POWER_WINDOW_SIZE if low_power else config.WINDOW_SIZE
+    msaa_samples_value = config.LOW_POWER_MSAA_SAMPLES if low_power else config.MSAA_SAMPLES
+    icosphere_subdivisions = (
+        config.LOW_POWER_ICOSPHERE_SUBDIVISIONS if low_power else config.ICOSPHERE_SUBDIVISIONS
+    )
+    particle_count = config.LOW_POWER_PARTICLE_COUNT if low_power else config.PARTICLE_COUNT
+
+    #: Substrings of ``GL_RENDERER`` that indicate a software/CPU rasterizer
+    #: rather than a real GPU, used only to suggest ``--low-power`` to the
+    #: user -- never to silently change already-fixed-at-creation settings
+    #: like window size or MSAA samples.
+    _SOFTWARE_RENDERER_HINTS = (
+        "llvmpipe",
+        "softpipe",
+        "swiftshader",
+        "basic render",
+        "microsoft basic",
+        "warp",
+    )
 
     class VisualizerApp(mglw.WindowConfig):
         gl_version = (3, 3)
         title = "audio_reactive_3d"
-        window_size = config.WINDOW_SIZE
-        aspect_ratio = config.WINDOW_SIZE[0] / config.WINDOW_SIZE[1]
+        window_size = window_size_value
+        aspect_ratio = window_size_value[0] / window_size_value[1]
         resource_dir = config.SHADERS_DIR
         vsync = config.VSYNC
         resizable = True
-        samples = 4
+        samples = msaa_samples_value
         clear_color = config.CLEAR_COLOR
 
         def __init__(self, **kwargs: object) -> None:
             super().__init__(**kwargs)
+
+            renderer = str(self.ctx.info.get("GL_RENDERER", ""))
+            if not low_power and any(
+                hint in renderer.lower() for hint in _SOFTWARE_RENDERER_HINTS
+            ):
+                logger.warning(
+                    "Detected a software/CPU renderer (%r). If the icosphere mode "
+                    "(key 1) looks frozen or very slow, rerun with --low-power.",
+                    renderer,
+                )
 
             self._icosphere_reload = HotReloadProgram(
                 self.ctx,
@@ -90,24 +126,27 @@ def build_visualizer_app(
             self._fps_display = 0.0
 
             logger.info(
-                "Visualizer ready: %d verts / %d tris, %d particles, device=%r",
+                "Visualizer ready: %d verts / %d tris, %d particles, device=%r, "
+                "low_power=%s, renderer=%r",
                 self._scene.vertex_count,
                 self._scene.triangle_count,
                 self._particles.particle_count,
                 device_label,
+                low_power,
+                renderer,
             )
 
         def _on_icosphere_reload(self, program: object) -> None:
             if hasattr(self, "_scene"):
                 self._scene.set_program(program)
             else:
-                self._scene = Scene(self.ctx, program)
+                self._scene = Scene(self.ctx, program, subdivisions=icosphere_subdivisions)
 
         def _on_particle_reload(self, program: object) -> None:
             if hasattr(self, "_particles"):
                 self._particles.set_program(program)
             else:
-                self._particles = ParticleScene(self.ctx, program)
+                self._particles = ParticleScene(self.ctx, program, particle_count=particle_count)
 
         def on_render(self, time_s: float, frame_time: float) -> None:
             if capture_alive is not None and not capture_alive.is_set():

@@ -25,17 +25,20 @@ _FEATURES_TEXTURE_UNIT = 0
 class ParticleScene:
     """Owns the particle point cloud, shader program, and feature texture."""
 
-    def __init__(self, ctx: moderngl.Context, program: moderngl.Program) -> None:
+    def __init__(
+        self,
+        ctx: moderngl.Context,
+        program: moderngl.Program,
+        particle_count: int = config.PARTICLE_COUNT,
+    ) -> None:
         self._ctx = ctx
         self.set_program(program)
 
-        directions = generate_fibonacci_sphere(config.PARTICLE_COUNT)
-        bin_indices = (np.arange(config.PARTICLE_COUNT) % config.SPECTRUM_BINS).astype(
-            np.float32
-        )
+        directions = generate_fibonacci_sphere(particle_count)
+        bin_indices = (np.arange(particle_count) % config.SPECTRUM_BINS).astype(np.float32)
         interleaved = np.hstack([directions, bin_indices.reshape(-1, 1)]).astype(np.float32)
         self._vbo = ctx.buffer(interleaved.tobytes())
-        self.particle_count = config.PARTICLE_COUNT
+        self.particle_count = particle_count
 
         # Feature vector as a (128 x 1) single-channel float texture so the
         # vertex shader can texelFetch an arbitrary, per-particle bin index

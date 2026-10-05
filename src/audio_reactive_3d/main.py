@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 import signal
+import sys
 import threading
 import time
 
@@ -147,7 +148,7 @@ def _run_headless(device_name: str | None, log_every_tick: bool) -> int:
     return 0
 
 
-def _run_render(device_name: str | None) -> int:
+def _run_render(device_name: str | None, low_power: bool) -> int:
     """Capture loopback audio, run the DSP pipeline, and open the visualizer.
 
     Degrades gracefully (logs an error, returns a nonzero exit code) if
@@ -166,11 +167,21 @@ def _run_render(device_name: str | None) -> int:
     capture, dsp_worker, shared = started
 
     try:
-        app_cls = build_visualizer_app(shared, capture.device_name, capture_alive=capture.alive)
+        app_cls = build_visualizer_app(
+            shared, capture.device_name, capture_alive=capture.alive, low_power=low_power
+        )
         logger.info("Opening visualizer window for device %r. Close it to stop.", capture.device_name)
-        # args=[] bypasses moderngl_window's own argv parsing (window
-        # backend/size/fullscreen flags) since our CLI already owns argv.
-        mglw.run_window_config(app_cls, args=[])
+        # moderngl_window's own parse_args() does `args or sys.argv[1:]`, so
+        # passing args=[] (falsy) does NOT suppress its argv parsing -- it
+        # silently falls through to the real sys.argv and chokes on our own
+        # CLI's flags (e.g. --low-power, --device). Temporarily strip argv
+        # down to just the program name for the duration of the call.
+        original_argv = sys.argv
+        sys.argv = original_argv[:1]
+        try:
+            mglw.run_window_config(app_cls, args=[])
+        finally:
+            sys.argv = original_argv
     except KeyboardInterrupt:
         logger.info("Interrupted, shutting down...")
     except Exception as exc:  # noqa: BLE001 - must not hard-crash on GL failures
@@ -216,6 +227,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "required)."
         ),
     )
+    parser.add_argument(
+        "--low-power",
+        action="store_true",
+        help=(
+            "Use CPU-friendly rendering settings (smaller window, no MSAA, a "
+            "much lower-poly icosphere, fewer particles). Use this if you "
+            "have no dedicated GPU -- the default icosphere mode can render "
+            "too slowly on a software rasterizer to look animated."
+        ),
+    )
     return parser
 
 
@@ -231,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.headless:
         return _run_headless(args.device, args.log_features)
 
-    return _run_render(args.device)
+    return _run_render(args.device, args.low_power)
 
 
 if __name__ == "__main__":

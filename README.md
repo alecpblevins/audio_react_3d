@@ -41,6 +41,28 @@ uv run python -m audio_reactive_3d.main
 
 Press **1** / **2** to switch visual modes, **Esc** to quit.
 
+### No dedicated GPU? Use `--low-power`
+
+The icosphere mode (`1`) renders a ~2.5k-vertex mesh with 4x MSAA and a
+full-screen lighting shader — cheap on real GPU hardware, but expensive on
+a *software* OpenGL rasterizer (e.g. Mesa llvmpipe on Linux, or Windows'
+"Microsoft Basic Render Driver" / WARP fallback when there's no GPU
+driver). On those renderers it can drop to a crawl and look frozen, while
+the particle mode (`2`) — much cheaper per-pixel — keeps animating
+normally. If that's what you're seeing, run with `--low-power`:
+
+```sh
+uv run python -m audio_reactive_3d.main --low-power
+```
+
+This disables MSAA, shrinks the window to 854x480, uses a much lower-poly
+icosphere (subdivision level 2, 162 verts / 320 tris instead of 2562 /
+5120), and uses fewer particles (768 instead of 2048) — all to keep
+per-pixel and per-vertex cost low enough for a software rasterizer to hit a
+usable frame rate. The app also passively checks the reported `GL_RENDERER`
+string at startup and logs a suggestion to try `--low-power` if it looks
+like a software renderer, win or lose.
+
 ### Linux (PulseAudio/PipeWire monitor source)
 
 `SoundCard` loopback-captures via the default sink's **monitor** source, so

@@ -26,11 +26,16 @@ _FEATURES_UBO_BINDING = 0
 class Scene:
     """Icosphere mesh + shader program reacting to the live feature vector."""
 
-    def __init__(self, ctx: moderngl.Context, program: moderngl.Program) -> None:
+    def __init__(
+        self,
+        ctx: moderngl.Context,
+        program: moderngl.Program,
+        subdivisions: int = config.ICOSPHERE_SUBDIVISIONS,
+    ) -> None:
         self._ctx = ctx
         self._program = program
 
-        vertices, normals, indices = generate_icosphere(config.ICOSPHERE_SUBDIVISIONS)
+        vertices, normals, indices = generate_icosphere(subdivisions)
         interleaved = np.hstack([vertices, normals]).astype(np.float32)
 
         self._vbo = ctx.buffer(interleaved.tobytes())

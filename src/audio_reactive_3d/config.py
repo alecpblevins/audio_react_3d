@@ -96,6 +96,9 @@ WINDOW_SIZE: tuple[int, int] = (1280, 720)
 TARGET_FPS: int = 60
 VSYNC: bool = True
 
+#: MSAA sample count for the default (GPU-accelerated) rendering path.
+MSAA_SAMPLES: int = 4
+
 SHADERS_DIR: Path = Path(__file__).resolve().parent / "render" / "shaders"
 
 #: Number of icosahedron subdivision passes. Each pass quadruples the
@@ -144,6 +147,34 @@ PARTICLE_POINT_RMS_SCALE: float = 6.0
 
 #: Hot-reload: how often (seconds) to stat() shader files for changes.
 SHADER_RELOAD_POLL_SECONDS: float = 0.5
+
+# --------------------------------------------------------------------------
+# Rendering: low-power / CPU (software-rendering) workaround
+# --------------------------------------------------------------------------
+#
+# Without a dedicated GPU, rendering falls back to a software OpenGL
+# rasterizer (e.g. Mesa llvmpipe, or WARP/"Microsoft Basic Render Driver"
+# on Windows), which is dramatically slower per pixel and per triangle than
+# real hardware. The default icosphere path -- a ~5k-triangle mesh rendered
+# at 1280x720 with 4x MSAA -- can be expensive enough on a software
+# rasterizer to appear completely frozen, while the particle mode's sparse
+# point sprites stay cheap and keep animating normally. Passing
+# ``--low-power`` on the CLI swaps in the lighter-weight settings below for
+# both modes.
+
+#: Disables MSAA entirely in low-power mode (antialiasing is one of the
+#: single biggest fragment-shader cost multipliers on a software rasterizer).
+LOW_POWER_MSAA_SAMPLES: int = 0
+
+#: Smaller window in low-power mode, directly cutting total fragment count.
+LOW_POWER_WINDOW_SIZE: tuple[int, int] = (854, 480)
+
+#: Level-2 icosphere: 162 vertices / 320 triangles, versus the default
+#: level 4's 2562 / 5120 -- roughly 16x fewer triangles to rasterize/light.
+LOW_POWER_ICOSPHERE_SUBDIVISIONS: int = 2
+
+#: Fewer particles in low-power mode (still enough to read as a spectrum).
+LOW_POWER_PARTICLE_COUNT: int = 768
 
 #: Slow idle auto-rotation so the mesh reads as 3D even with a static
 #: camera (radians/second about the Y axis).
