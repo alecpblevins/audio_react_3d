@@ -33,10 +33,6 @@ RING_BUFFER_FRAMES: int = SAMPLE_RATE * 2  # 2 seconds of audio
 #: to use the system default output device's loopback.
 DEVICE_NAME: str | None = None
 
-#: How often (seconds) the capture thread logs an RMS level to the console
-#: while running standalone (``--list-devices`` is unaffected).
-RMS_LOG_INTERVAL_SECONDS: float = 1.0
-
 # --------------------------------------------------------------------------
 # DSP (Milestone 2)
 # --------------------------------------------------------------------------
@@ -53,9 +49,36 @@ LOW_BAND_HZ: tuple[float, float] = (20.0, 250.0)
 MID_BAND_HZ: tuple[float, float] = (250.0, 2_000.0)
 HIGH_BAND_HZ: tuple[float, float] = (2_000.0, 16_000.0)
 
-#: Attack/release smoothing time constants, in seconds.
+#: Frequency range covered by the 64 log-spaced spectrum bins.
+SPECTRUM_MIN_HZ: float = 20.0
+SPECTRUM_MAX_HZ: float = 20_000.0
+
+#: dB range used to normalize magnitude/RMS values to 0..1. 0 dBFS is full
+#: scale for a float32 signal; -80 dB is a practical noise floor.
+DB_FLOOR: float = -80.0
+DB_CEILING: float = 0.0
+
+#: Attack/release smoothing time constants, in seconds, applied to the
+#: spectrum + band energies + RMS.
 ATTACK_SECONDS: float = 0.010
 RELEASE_SECONDS: float = 0.200
+
+#: Separate (slower) ballistics for the BPM estimate, which should not
+#: visibly flicker between beats.
+BPM_ATTACK_SECONDS: float = 0.5
+BPM_RELEASE_SECONDS: float = 2.0
+
+#: Onset (spectral flux) detection tuning.
+#: Number of recent frames kept to compute the adaptive flux threshold.
+ONSET_HISTORY_FRAMES: int = 43  # ~1.4s of history at 30 Hz
+#: Flux must exceed mean + K * stddev of recent history to count as onset.
+ONSET_THRESHOLD_K: float = 1.5
+#: Minimum time between two reported onsets, to avoid double-triggering.
+ONSET_REFRACTORY_SECONDS: float = 0.1
+
+#: Plausible BPM range for tempo estimation.
+BPM_MIN: float = 60.0
+BPM_MAX: float = 200.0
 
 #: Target DSP feature-extraction rate (Hz).
 DSP_TARGET_HZ: float = 30.0

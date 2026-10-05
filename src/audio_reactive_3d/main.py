@@ -1,9 +1,10 @@
 """Entry point for audio_reactive_3d.
 
-Wires together audio capture, (eventually) DSP, and (eventually) rendering.
-Milestone 1 only implements loopback capture plus a console RMS readout and
-a ``--list-devices`` CLI flag; later milestones hang off the same entry
-point without changing this module's public shape.
+Wires together audio capture, the DSP feature pipeline, and (eventually)
+rendering. Through Milestone 2 this implements loopback capture, FFT-based
+feature extraction with attack/release smoothing, a ``--list-devices`` CLI
+flag, and a console feature readout; later milestones hang off the same
+entry point without changing this module's public shape.
 """
 
 from __future__ import annotations
@@ -12,9 +13,11 @@ import argparse
 import logging
 import signal
 import threading
+import time
 
 from audio_reactive_3d import config
-from audio_reactive_3d.audio.capture import LoopbackCapture, list_loopback_devices, log_rms_forever
+from audio_reactive_3d.audio.capture import LoopbackCapture, list_loopback_devices
+from audio_reactive_3d.audio.dsp_worker import DSPWorker, SharedFeatureState
 from audio_reactive_3d.audio.ring_buffer import RingBuffer
 
 logger = logging.getLogger(__name__)
@@ -43,8 +46,51 @@ def _print_devices() -> int:
     return 0
 
 
-def _run_capture(device_name: str | None) -> int:
-    """Milestone 1 behavior: capture loopback audio and log RMS once/sec."""
+def _log_features_forever(
+    shared: SharedFeatureState,
+    worker: DSPWorker,
+    stop_event: threading.Event,
+    log_every_tick: bool,
+) -> None:
+    """Console readout of extracted features for manual verification.
+
+    If ``log_every_tick`` is set (``--log-features``), logs the full raw
+    feature vector on every DSP tick (~``config.DSP_TARGET_HZ`` times per
+    second) -- this is the Milestone 2 acceptance check. Otherwise logs a
+    condensed one-line summary once per second, which is friendlier for
+    everyday use.
+    """
+    period = 1.0 / config.DSP_TARGET_HZ if log_every_tick else 1.0
+    last_frame_count = -1
+    while not stop_event.is_set():
+        time.sleep(period)
+        frame = shared.latest
+        if frame is None:
+            logger.info("No features yet (buffering audio)...")
+            continue
+
+        if log_every_tick:
+            if worker.frames_processed == last_frame_count:
+                continue  # avoid re-logging a stale frame while waiting
+            last_frame_count = worker.frames_processed
+            logger.info("features=%s", frame.vector.tolist())
+        else:
+            logger.info(
+                "low=%.3f mid=%.3f high=%.3f rms=%.3f onset=%d bpm=%.1f "
+                "(processed=%d skipped=%d)",
+                frame.low_band,
+                frame.mid_band,
+                frame.high_band,
+                frame.rms,
+                frame.onset,
+                frame.bpm,
+                worker.frames_processed,
+                worker.frames_skipped,
+            )
+
+
+def _run_capture(device_name: str | None, log_every_tick: bool) -> int:
+    """Capture loopback audio, run the DSP pipeline, and log features."""
     ring_buffer = RingBuffer(capacity=config.RING_BUFFER_FRAMES, channels=config.CHANNELS)
 
     try:
@@ -52,6 +98,9 @@ def _run_capture(device_name: str | None) -> int:
     except RuntimeError as exc:
         logger.error("Failed to initialize audio capture: %s", exc)
         return 1
+
+    shared = SharedFeatureState()
+    dsp_worker = DSPWorker(ring_buffer, shared)
 
     stop_event = threading.Event()
 
@@ -66,10 +115,12 @@ def _run_capture(device_name: str | None) -> int:
         pass  # SIGTERM not available on this platform.
 
     capture.start()
+    dsp_worker.start()
     logger.info("Capturing from %r. Press Ctrl+C to stop.", capture.device_name)
     try:
-        log_rms_forever(ring_buffer, stop_event=stop_event)
+        _log_features_forever(shared, dsp_worker, stop_event, log_every_tick)
     finally:
+        dsp_worker.stop()
         capture.stop()
 
     return 0
@@ -91,6 +142,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Substring of the output device name to capture (default: system default).",
     )
+    parser.add_argument(
+        "--log-features",
+        action="store_true",
+        help=(
+            "Log the full raw feature vector on every DSP tick "
+            f"(~{config.DSP_TARGET_HZ:.0f} Hz) instead of a 1 Hz summary."
+        ),
+    )
     return parser
 
 
@@ -103,8 +162,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_devices:
         return _print_devices()
 
-    return _run_capture(args.device)
+    return _run_capture(args.device, args.log_features)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

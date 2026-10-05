@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -159,25 +158,3 @@ class LoopbackCapture:
                     self._ring_buffer.write(frames.astype(np.float32, copy=False))
         except Exception:
             logger.exception("Audio capture loop terminated unexpectedly")
-
-
-def log_rms_forever(
-    ring_buffer: RingBuffer,
-    interval_seconds: float = config.RMS_LOG_INTERVAL_SECONDS,
-    stop_event: threading.Event | None = None,
-) -> None:
-    """Poll the ring buffer and log an RMS level once per ``interval_seconds``.
-
-    Intended for Milestone 1 manual verification only; the real DSP thread
-    (Milestone 2) replaces this with the full feature-extraction pipeline.
-    """
-    stop_event = stop_event or threading.Event()
-    window = config.BLOCK_SIZE * 4
-    while not stop_event.is_set():
-        time.sleep(interval_seconds)
-        chunk = ring_buffer.peek_latest(window)
-        if chunk is None or chunk.size == 0:
-            logger.info("RMS: (no audio yet)")
-            continue
-        rms = float(np.sqrt(np.mean(np.square(chunk))))
-        logger.info("RMS: %.5f", rms)

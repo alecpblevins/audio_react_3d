@@ -119,10 +119,9 @@ class RingBuffer:
         without needing to track a separate read cursor. Returns ``None``
         if fewer than ``n`` frames have ever been written.
         """
-        if self._available < n and self._write_index < n and self._available < self._capacity:
+        if self._available < n:
             # Not enough history yet.
-            if self._available < n:
-                return None
+            return None
 
         n = min(n, self._capacity)
         end = self._write_index
