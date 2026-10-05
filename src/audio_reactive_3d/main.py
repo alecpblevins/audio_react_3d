@@ -1,10 +1,10 @@
 """Entry point for audio_reactive_3d.
 
-Wires together audio capture, the DSP feature pipeline, and (eventually)
-rendering. Through Milestone 2 this implements loopback capture, FFT-based
-feature extraction with attack/release smoothing, a ``--list-devices`` CLI
-flag, and a console feature readout; later milestones hang off the same
-entry point without changing this module's public shape.
+Wires together audio capture, the DSP feature pipeline, and the GLSL
+renderer. By default, running the module opens the moderngl-window
+visualizer; ``--headless`` keeps the Milestone 1/2 console-only workflow
+(no GL context needed) for environments without a display, e.g. CI or a
+quick device/DSP sanity check.
 """
 
 from __future__ import annotations
@@ -89,18 +89,41 @@ def _log_features_forever(
             )
 
 
-def _run_capture(device_name: str | None, log_every_tick: bool) -> int:
-    """Capture loopback audio, run the DSP pipeline, and log features."""
+def _start_capture_and_dsp(
+    device_name: str | None,
+) -> tuple[LoopbackCapture, DSPWorker, SharedFeatureState] | None:
+    """Create and start the ring buffer, capture, and DSP worker.
+
+    Returns ``None`` (after logging an error) if audio capture could not be
+    initialized, so callers can degrade gracefully instead of crashing.
+    """
     ring_buffer = RingBuffer(capacity=config.RING_BUFFER_FRAMES, channels=config.CHANNELS)
 
     try:
         capture = LoopbackCapture(ring_buffer, device_name=device_name)
     except RuntimeError as exc:
         logger.error("Failed to initialize audio capture: %s", exc)
-        return 1
+        return None
 
     shared = SharedFeatureState()
     dsp_worker = DSPWorker(ring_buffer, shared)
+
+    capture.start()
+    dsp_worker.start()
+    return capture, dsp_worker, shared
+
+
+def _run_headless(device_name: str | None, log_every_tick: bool) -> int:
+    """Capture loopback audio, run the DSP pipeline, and log features.
+
+    No GL context or window is created -- useful for devices/sessions
+    without a display, or for quickly sanity-checking audio/DSP in
+    isolation from rendering.
+    """
+    started = _start_capture_and_dsp(device_name)
+    if started is None:
+        return 1
+    capture, dsp_worker, shared = started
 
     stop_event = threading.Event()
 
@@ -114,11 +137,45 @@ def _run_capture(device_name: str | None, log_every_tick: bool) -> int:
     except (AttributeError, ValueError):
         pass  # SIGTERM not available on this platform.
 
-    capture.start()
-    dsp_worker.start()
     logger.info("Capturing from %r. Press Ctrl+C to stop.", capture.device_name)
     try:
         _log_features_forever(shared, dsp_worker, stop_event, log_every_tick)
+    finally:
+        dsp_worker.stop()
+        capture.stop()
+
+    return 0
+
+
+def _run_render(device_name: str | None) -> int:
+    """Capture loopback audio, run the DSP pipeline, and open the visualizer.
+
+    Degrades gracefully (logs an error, returns a nonzero exit code) if
+    either audio capture or GL window/context creation fails, per the
+    project's "must not hard-crash" requirement -- this matters most on
+    Linux/macOS or headless hosts where WASAPI-style loopback or a GPU
+    context may be unavailable.
+    """
+    import moderngl_window as mglw
+
+    from audio_reactive_3d.render.app import build_visualizer_app
+
+    started = _start_capture_and_dsp(device_name)
+    if started is None:
+        return 1
+    capture, dsp_worker, shared = started
+
+    try:
+        app_cls = build_visualizer_app(shared, capture.device_name)
+        logger.info("Opening visualizer window for device %r. Close it to stop.", capture.device_name)
+        # args=[] bypasses moderngl_window's own argv parsing (window
+        # backend/size/fullscreen flags) since our CLI already owns argv.
+        mglw.run_window_config(app_cls, args=[])
+    except KeyboardInterrupt:
+        logger.info("Interrupted, shutting down...")
+    except Exception as exc:  # noqa: BLE001 - must not hard-crash on GL failures
+        logger.error("Visualizer failed to start or crashed: %s", exc)
+        return 1
     finally:
         dsp_worker.stop()
         capture.stop()
@@ -146,8 +203,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--log-features",
         action="store_true",
         help=(
-            "Log the full raw feature vector on every DSP tick "
-            f"(~{config.DSP_TARGET_HZ:.0f} Hz) instead of a 1 Hz summary."
+            "In --headless mode, log the full raw feature vector on every DSP "
+            f"tick (~{config.DSP_TARGET_HZ:.0f} Hz) instead of a 1 Hz summary."
+        ),
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help=(
+            "Run audio capture + DSP only, logging features to the console "
+            "instead of opening the GLSL visualizer window (no GPU/display "
+            "required)."
         ),
     )
     return parser
@@ -162,7 +228,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_devices:
         return _print_devices()
 
-    return _run_capture(args.device, args.log_features)
+    if args.headless:
+        return _run_headless(args.device, args.log_features)
+
+    return _run_render(args.device)
 
 
 if __name__ == "__main__":

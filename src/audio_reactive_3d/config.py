@@ -98,6 +98,29 @@ VSYNC: bool = True
 
 SHADERS_DIR: Path = Path(__file__).resolve().parent / "render" / "shaders"
 
+#: Number of icosahedron subdivision passes. Each pass quadruples the
+#: triangle count; level 4 yields 2562 vertices / 5120 triangles, matching
+#: the spec's "~2k verts, no external assets" target.
+ICOSPHERE_SUBDIVISIONS: int = 4
+
+#: How far vertices are pushed outward along their normal, scaled by the
+#: (smoothed, 0..1) low-band energy. In mesh-radius units (mesh is a unit
+#: sphere), so 0.35 means the surface can bulge up to 35% of its radius.
+DISPLACEMENT_SCALE: float = 0.35
+
+#: Camera / projection setup for the Milestone 3 icosphere scene.
+CAMERA_POSITION: tuple[float, float, float] = (0.0, 0.0, 3.0)
+CAMERA_FOV_DEGREES: float = 45.0
+CAMERA_NEAR: float = 0.1
+CAMERA_FAR: float = 100.0
+
+#: Slow idle auto-rotation so the mesh reads as 3D even with a static
+#: camera (radians/second about the Y axis).
+ROTATION_SPEED_RAD_PER_SEC: float = 0.3
+
+#: Background clear color (r, g, b, a).
+CLEAR_COLOR: tuple[float, float, float, float] = (0.02, 0.02, 0.05, 1.0)
+
 # --------------------------------------------------------------------------
 # Logging
 # --------------------------------------------------------------------------
